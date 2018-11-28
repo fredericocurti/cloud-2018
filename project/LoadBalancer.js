@@ -25,7 +25,7 @@ const listRunningInstances = async (instanceOwner) => {
     }).promise()
 
     let runningInstances = instancesWithSameTag.Reservations.reduce((acc, item) => {
-        return acc.concat(item.Instances.filter(i => i.State.Name === 'running'))
+        return acc.concat(item.Instances.filter(i => i.State.Name === 'running' && !i.Tags.find(t => t.Value === 'loadbalancer' )))
     }, [])
 
     console.log(`There are ${runningInstances.length} running instances`)

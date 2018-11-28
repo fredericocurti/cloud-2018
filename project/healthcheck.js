@@ -2,7 +2,6 @@
 const log = (...args) => console.log('[HS]', ...args)
 const message = (...args) => process.send(...args)
 const fetch = require('node-fetch')
-const { InstanceManager } = require('../aps3')
 
 /**
  * @type {import('aws-sdk').EC2.InstanceList} *

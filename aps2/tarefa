@@ -67,18 +67,19 @@ def main():
             listar()
         elif command == commands[2]:
             try:
-                buscar(int(inputs[2]))
+                buscar(inputs[2])
             except:
                 print('Argumento inválido, uso $ tarefa.py buscar <id>')    
         elif command == commands[3]:
             try:
-                apagar(int(inputs[2]))
+                print()
+                apagar(inputs[2])
             except:
                 print('Argumento inválido, uso $ tarefa.py apagar <id>')
             
         elif command == commands[4]:
             try:
-                atualizar(int(inputs[2]), inputs[3])
+                atualizar(inputs[2], inputs[3])
             except:
                 print("Argumentos inválidos, uso $ tarefa.py atualizar <id> '<novo conteudo>'")
     else:

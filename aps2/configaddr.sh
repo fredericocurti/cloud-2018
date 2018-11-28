@@ -17,5 +17,5 @@ tput sgr0;
 # \"rab\"
 
 
-read "?Type server path and press [ENTER] (http://...): " X
+read "?Type server path and press [ENTER] (eg. http://xxx.xxx.xxx.xxx:port): " X
 configfn $X

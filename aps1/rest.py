@@ -5,9 +5,7 @@ import bson
 
 app = Flask(__name__)
 
-global tasks, tasks_count
-tasks = {}
-tasks_count = 0
+global tasks
 
 def Task(id, content):
     return {'_id': str(id), 'content': content}
@@ -22,8 +20,7 @@ def front():
 
 @app.route('/task', methods = ['POST', 'GET'])
 def get_all_or_add():
-    global tasks_count
-
+    
     if request.method == 'POST':
         body = json.loads(request.data)
 

@@ -4,24 +4,22 @@ const fs = require('fs')
 const { spawnSync } = require('child_process')
 const path = require('path')
 const http = require('http')
+aws.config.update({ region: 'us-east-1' })
+const ec2 = new aws.EC2()
 const fetch = require('node-fetch')
+
 const remotePort = 5000
 
-/** @type {import('aws-sdk').EC2} */
-let ec2
 
 class InstanceManager {
-    constructor(keyPairName, securityGroupName, ownerName, accessKeyId, secretAccessKey, ) {
-        aws.config.update({ region: 'us-east-1', accessKeyId: accessKeyId, secretAccessKey: secretAccessKey })
-        ec2 = new aws.EC2()
-
+    constructor(keyPairName, securityGroupName, ownerName) {
         // @ts-ignore
         return (async () => {
 
             // let [keyPair, securityGroup] = await Promise.all([
             // this.createKeyPair(keyPairName), this.createSecurityGroup(securityGroupName)
             // ])
-            console.log('\n - building InstanceManager \n')
+            console.log('--- building InstanceManager ---\n')
 
             console.log('-> Trying to create KeyPair', keyPairName)
             this.keyPair = await this.createKeyPair(keyPairName)
@@ -38,7 +36,7 @@ class InstanceManager {
             this.instances = []
             await this.updateInstancesArray()
 
-            console.log('\n~> InstanceManager created successfully')
+            console.log('\n~~> InstanceManager created successfully <~~')
             return this; // when done
         })()
     }
@@ -64,9 +62,9 @@ class InstanceManager {
     async createKeyPair(keyName) {
         let keyPairs = await ec2.describeKeyPairs().promise()
         let found = keyPairs.KeyPairs.find((el) => el.KeyName === keyName)
-        let existsOnFolder = fs.existsSync(path.join(__dirname, `./${keyName}.pem`))
-        if (found && existsOnFolder) {
-            console.log(`[WARNING] KEYPAIR ${keyName} ALREADY EXISTS AND IS ON FOLDER! USING THE CURRENT ONE`)
+
+        if (found) {
+            console.log(`[WARNING] KEYPAIR ${keyName} ALREADY EXISTS! USING THE CURRENT ONE`)
             return found
         } else {
             try {
@@ -74,16 +72,11 @@ class InstanceManager {
             } catch (error) {
                 console.log('Failed deleting existing key on file system')
             }
-
-            if (!existsOnFolder) {
-                await this.deleteKeyPair(keyName)
-            }
-            
             console.log('Creating new key with name', keyName)
             try {
-                let res = await ec2.createKeyPair({ KeyName: keyName}).promise()
-                fs.writeFileSync(path.join(__dirname, `./${keyName}.pem`), res.KeyMaterial)
-                console.log(`Key created! - file is ./${keyName}.pem`)
+                let res = await ec2.createKeyPair({ KeyName: 'fred-aps3' }).promise()
+                fs.writeFileSync(`./${keyName}.pem`, res.KeyMaterial)
+                console.log(`Key created! - file is ./${keyName}.pem \n`)
                 return res
             } catch (error) {
                 throw error
@@ -97,7 +90,7 @@ class InstanceManager {
                 GroupName: groupName,
                 Description: groupName,
             }).promise()
-            console.log('New Group created! -', sg.GroupId)
+            console.log('New Group created! -', sg.GroupId, '\n')
             console.log('Allowing ports 22 and 5000 on SG')
             try {
                 let res = await ec2.authorizeSecurityGroupIngress({
@@ -142,15 +135,9 @@ class InstanceManager {
             const imageId = 'ami-0ac019f4fcb7cb7e6'
             console.log('UserData:', path.join(__dirname,'install.sh'))
             const userDataFile = fs.readFileSync(path.join(__dirname,'install.sh')).toString()
-            
+    
             let res = await ec2.runInstances({
-                TagSpecifications: [{
-                    Tags: [
-                        { Key: 'Owner', Value: this.ownerName },
-                        { Key: 'Type', Value: 'worker'}
-                    ],
-                    ResourceType: 'instance' 
-                }],
+                TagSpecifications: [{ Tags: [{ Key: 'Owner', Value: this.ownerName }], ResourceType: 'instance' }],
                 SecurityGroupIds: [this.securityGroup.GroupId],
                 MaxCount: instanceAmount,
                 MinCount: instanceAmount,
@@ -214,7 +201,7 @@ class InstanceManager {
             throw error
         }
 
-        console.log('Purge successfull')
+        console.log('Purge successfull, please instantiate other InstanceManager')
     }
 
     async _waitInstancesTermination(instanceIds) {

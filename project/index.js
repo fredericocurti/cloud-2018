@@ -3,7 +3,13 @@
 
 const readline = require('readline');
 const aws = require('aws-sdk')
+const fs = require('fs')
+const path = require('path')
+const fetch = require('node-fetch')
+
 const { InstanceManager } = require('./InstanceManager')
+
+const argv = require('minimist')(process.argv.slice(2))
 
 function askQuestion(query) {
     const rl = readline.createInterface({
@@ -17,21 +23,83 @@ function askQuestion(query) {
     }))
 }
 
-async function main() {
-    // const akid = await askQuestion("-> Please enter your AWS Access Key ID: ");
-    // const sak = await askQuestion("-> Please enter your AWS Secret Access Key: ");
-    // const username = await askQuestion("-> Please enter your username: ");
-    // const keyPairName = await askQuestion("-> Please enter the desired keypair name: ");
-    // const securityGroupName = await askQuestion("-> Please enter the desired Security Group name: ");
-    let nInstances = await askQuestion("-> How many instances would you like? ");
-    nInstances = parseInt(nInstances)
+async function waitForChildInstances(ec2, ownerName, nInstances){
+    return new Promise((resolve, reject) => {
+        let checkInterval = setInterval(async () => {
+            let res = await ec2.describeInstances({
+                Filters: [
+                    { Name: 'tag:Owner', Values: [ownerName] },
+                    { Name: 'tag:Type', Values: ['worker'] }],
+            }).promise()
+    
+            let ready = {}
+    
+            /** @type {import('aws-sdk').EC2.Instance[]} */
+            let childInstances = []
+    
+            res.Reservations.forEach(r => {
+                childInstances = childInstances.concat(r.Instances.filter(r => r.State.Name === 'running'))
+            })
+    
+            // console.log(childInstances)
+            console.log('Waiting...')
+    
+            childInstances.forEach(async(i) => {
+                // console.log(i.InstanceId)
+                try {
+                    // @ts-ignore
+                    let s = await fetch(`http://${i.PublicIpAddress}:5000/healthcheck`)    
+                    if (s.status === 200) {
+                        ready[i.InstanceId] = true
+                    } else {
+                        ready[i.InstanceId] = i.State.Name
+                    }
+                } catch (error) {
+                    ready[i.InstanceId] = error.message
+                }
+                let allRunning = Object.values(ready).every((i) => i === true)
+                if (allRunning && Object.keys(ready).length === nInstances) {
+                    console.log(ready)
+                    clearInterval(checkInterval)
+                    resolve()
+                }
+            })
+        }, 5000)
+    })
+}
 
-    const { akid, sak, username, keyPairName, securityGroupName } = require('./cred')
-    let waiterResult
-    let previousInstances
+async function main() {
+    let akid, sak, username, keyPairName, securityGroupName
+    try {
+        let credentials = require('./credentials')  
+        akid = credentials.akid,
+        sak = credentials.sak,
+        username = credentials.username,
+        keyPairName = credentials.keyPairName,
+        securityGroupName = credentials.securityGroupName 
+    } catch (error) {
+        console.log('Couldnt find credentials.js, please insert them below:')
+        akid = await askQuestion("-> Please enter your AWS Access Key ID: ");
+        sak = await askQuestion("-> Please enter your AWS Secret Access Key: ");
+        username = await askQuestion("-> Please enter your username: ");
+        keyPairName = await askQuestion("-> Please enter the desired keypair name: ");
+        securityGroupName = await askQuestion("-> Please enter the desired Security Group name: ");
+        console.log("These credentials are now saved for future use. They're also ignored on git")
+        fs.writeFileSync(path.join(__dirname, 'credentials.js'),`
+module.exports = {
+    akid: '${akid}',
+    sak: '${sak}',
+    username: '${username}',
+    keyPairName: '${keyPairName}',
+    securityGroupName: '${securityGroupName}'
+}`)
+    }
 
     aws.config.update({ region: 'us-east-1', accessKeyId: akid, secretAccessKey: sak })
     const ec2 = new aws.EC2()
+            
+    let waiterResult
+    let previousInstances
 
     try {
         previousInstances = await Promise.all([
@@ -41,11 +109,32 @@ async function main() {
         ])
 
     } catch (error) {
-        console.log('[Error] Failed to authenticate user')
+        console.log('[Error] Failed to authenticate user. Deleting credentials.js')
+        fs.unlinkSync(path.join(__dirname, 'credentials.js'))
         process.exit(0)
     }
-    
+
     console.log('Authentication Successfull')
+
+    
+    if ('purge' in argv) {
+        const instanceManager = await new InstanceManager(keyPairName, securityGroupName, username, akid, sak)
+        await instanceManager.purge()
+        try {
+            fs.unlinkSync(path.join(__dirname, 'credentials.js'))
+            console.log('Deleted credentials.js')
+        } catch (error) {
+            console.log(error)
+        }
+        process.exit()
+    }
+
+    let nInstances = await askQuestion("-> How many instances would you like? ");
+    nInstances = parseInt(nInstances)
+    if (isNaN(nInstances) || nInstances < 1 || nInstances > 10) {
+        console.log('Invalid number of instances!')
+        process.exit()
+    }
     
     let previousInstancesCount = 0
     let pi = []
@@ -66,7 +155,7 @@ async function main() {
         }
     }
 
-    const instanceManager = await new InstanceManager(keyPairName, securityGroupName, username)
+    const instanceManager = await new InstanceManager(keyPairName, securityGroupName, username, akid, sak)
     await instanceManager.checkAndTerminateRunningInstances()
 
     console.log('-> Deploying Load Balancer')
@@ -105,11 +194,18 @@ sudo node /home/ubuntu/cloud-2018/project/LoadBalancer.js --count ${nInstances} 
     }).promise()
 
     console.log(loadBalancerSubmission)
+    console.log('Please wait for the load balancer to become responsive')
     try {
         waiterResult = await ec2.waitFor('instanceRunning', {
             InstanceIds: [loadBalancerSubmission.Instances[0].InstanceId]
         }).promise()
-        console.log('Load balancer deployed! PublicIp:', waiterResult.Reservations[0].Instances[0].PublicIpAddress)    
+        let resultIp = waiterResult.Reservations[0].Instances[0].PublicIpAddress
+        console.log('🎉 Load balancer deployed!\nPublicIp:', resultIp)    
+        console.log('Please allow for some time while the worker instances are spawned')
+        await waitForChildInstances(ec2, username, nInstances)
+        console.log('All new instances are running and healthchecked!')
+        console.log('You can try consuming the service with the program in ../aps2')
+        console.log(`by pasting http://${resultIp}:5000 into the $ source configaddr.sh prompt`)
     } catch (error) {
         throw error
     }

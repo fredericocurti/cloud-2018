@@ -25,7 +25,7 @@ const listRunningInstances = async (instanceOwner) => {
     }).promise()
 
     let runningInstances = instancesWithSameTag.Reservations.reduce((acc, item) => {
-        return acc.concat(item.Instances.filter(i => i.State.Name === 'running'))
+        return acc.concat(item.Instances.filter(i => i.State.Name === 'running' && !i.Tags.find(t => t.Value === 'loadbalancer' )))
     }, [])
 
     console.log(`There are ${runningInstances.length} running instances`)
@@ -34,8 +34,8 @@ const listRunningInstances = async (instanceOwner) => {
 
 app.all('*', (req, res, next) => {
     const redirectUrl = 'http://'+ pickRandom(Object.keys(publicIps)) + ':' + remotePort + req.originalUrl
-    console.log(redirectUrl)
-    res.status(200).redirect(redirectUrl)
+    console.log('Redirecting to', redirectUrl)
+    res.redirect(redirectUrl)
 })
 
 const main = async () => {

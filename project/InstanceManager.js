@@ -208,7 +208,9 @@ class InstanceManager {
             await this.checkAndTerminateRunningInstances()
             await Promise.all([
                 this.deleteKeyPair(this.keyPair.KeyName),
-                this.deleteSecurityGroup(this.securityGroupName)
+                this.deleteSecurityGroup(this.securityGroupName),
+                this.deleteKeyPair(this.keyPair.KeyName+'-worker'),
+                this.deleteSecurityGroup(this.securityGroupName+'-worker')
             ])
         } catch (error) {
             throw error

@@ -100,7 +100,7 @@ echo aws_secret_access_key = ${sak} >> /home/ubuntu/.aws/credentials
 sudo apt -y install nodejs
 git clone https://github.com/fredericocurti/cloud-2018 /home/ubuntu/cloud-2018
 cd /home/ubuntu/cloud-2018/project && npm install
-sudo node /home/ubuntu/cloud-2018/project/LoadBalancer.js --count ${nInstances} --sg ${securityGroupName} --kp ${keyPairName} --owner ${username} --aki ${akid} --sak ${sak}/`)
+sudo node /home/ubuntu/cloud-2018/project/LoadBalancer.js --count ${nInstances} --sg ${securityGroupName} --kp ${keyPairName} --owner ${username} --aki ${akid} --sak ${sak}`)
 .toString('base64')
     }).promise()
 

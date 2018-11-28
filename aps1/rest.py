@@ -1,15 +1,20 @@
 from flask import Flask, redirect, url_for, request
+from pymongo import MongoClient
 import json
+import bson
+
 app = Flask(__name__)
 
 global tasks, tasks_count
 tasks = {}
 tasks_count = 0
 
-class Task():
-    def __init__(self, id, content):
-        self.id = id
-        self.content = content
+def Task(id, content):
+    return {'_id': str(id), 'content': content}
+
+client = MongoClient('mongodb://cloud2018:cloud2018@ds119394.mlab.com:19394/cloudproj')
+db = client['cloudproj']
+tasks = db['tasks']
 
 @app.route('/')
 def front():
@@ -21,18 +26,26 @@ def get_all_or_add():
 
     if request.method == 'POST':
         body = json.loads(request.data)
-        tasks[tasks_count] = Task(tasks_count, body['content'])
-        tasks_count += 1
-        return json.dumps({'status': 200}), 200
+
+        task_id = str(bson.ObjectId())
+        r = tasks.insert_one(Task(task_id, body['content']))
+
+        return json.dumps({'status': 200, 'id': task_id}), 200
     else:
-        return json.dumps(tasks, default=lambda x: x.__dict__)
+        # tasks.find
+        return json.dumps(list(tasks.find()))
 
 
-@app.route('/task/<int:id>', methods = ['DELETE', 'GET', 'PUT'])
+@app.route('/task/<id>', methods = ['DELETE', 'GET', 'PUT'])
 def alter(id):
     if request.method == 'DELETE':
         try:
-            del tasks[id]
+            # del tasks[id]
+            result = tasks.delete_one({'_id': id})
+
+            if (result.deleted_count == 0):
+                raise Exception
+
             return json.dumps({'status': 200, 'message':'content deleted'}), 200
         except:
             return json.dumps({'status': 404, 'message':'task not found'}), 404
@@ -41,16 +54,16 @@ def alter(id):
         body = json.loads(request.data)
         print(id, body)
         try:
-            tasks[id].content = body['content']
+            if tasks.update_one({'_id': id}, {"$set": {"content": body['content']}}).modified_count == 0:
+                raise Exception
             return json.dumps({'status': 200, 'message':'content updated'}), 200
         except:
             return json.dumps({'status': 404, 'message':'task not found'}), 404
     else:
         try:
-            data = tasks[id]
-            return json.dumps(data, default=lambda x: x.__dict__), 200
+            return json.dumps(dict(tasks.find_one({'_id': id}))), 200
         except:
-            return json.dumps({'status': 404}), 404
+            return json.dumps({'status': 404, 'message': 'task not found'}), 404
 
     
 @app.route('/healthcheck', methods = ['GET'])

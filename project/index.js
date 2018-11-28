@@ -66,7 +66,7 @@ async function main() {
         }
     }
 
-    const instanceManager = await new InstanceManager(keyPairName, securityGroupName, username)
+    const instanceManager = await new InstanceManager(keyPairName, securityGroupName, username, akid, sak)
     await instanceManager.checkAndTerminateRunningInstances()
 
     console.log('-> Deploying Load Balancer')

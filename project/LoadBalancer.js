@@ -67,8 +67,8 @@ const main = async () => {
         }
         throw error
     }
-
-    const instanceManager = await new InstanceManager(argv.kp+'-worker', argv.kp+'-worker', argv.owner)
+    
+    const instanceManager = await new InstanceManager(argv.kp+'-worker', argv.sg+'-worker', argv.owner, argv.aki, argv.sak)
     
     let runningInstances = await listRunningInstances(owner)
     if (runningInstances.length > instanceAmountTarget) {

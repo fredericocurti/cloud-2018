@@ -4,13 +4,15 @@ const fs = require('fs')
 const { spawnSync } = require('child_process')
 const path = require('path')
 const http = require('http')
-aws.config.update({ region: 'us-east-1'})
-const ec2 = new aws.EC2()
 const fetch = require('node-fetch')
 const remotePort = 5000
+let ec2
 
 class InstanceManager {
-    constructor(keyPairName, securityGroupName, ownerName) {
+    constructor(keyPairName, securityGroupName, ownerName, accessKeyId, secretAccessKey, ) {
+        aws.config.update({ region: 'us-east-1', accessKeyId: accessKeyId, secretAccessKey: secretAccessKey })
+        ec2 = new aws.EC2()
+        
         // @ts-ignore
         return (async () => {
 

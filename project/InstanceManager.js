@@ -11,17 +11,24 @@ const remotePort = 5000
 let ec2
 
 class InstanceManager {
-    constructor(keyPairName, securityGroupName, ownerName, accessKeyId, secretAccessKey, ) {
+    constructor(keyPairName, securityGroupName, ownerName, accessKeyId, secretAccessKey, purge = false) {
         aws.config.update({ region: 'us-east-1', accessKeyId: accessKeyId, secretAccessKey: secretAccessKey })
         ec2 = new aws.EC2()
 
         // @ts-ignore
         return (async () => {
+            this.ownerName = ownerName
+            this.securityGroupName = securityGroupName
+            this.keyPairName = keyPairName
 
             // let [keyPair, securityGroup] = await Promise.all([
             // this.createKeyPair(keyPairName), this.createSecurityGroup(securityGroupName)
             // ])
             console.log('\n - building InstanceManager \n')
+
+            if (purge) {
+                return this
+            }
 
             console.log('-> Trying to create KeyPair', keyPairName)
             this.keyPair = await this.createKeyPair(keyPairName)
@@ -55,9 +62,9 @@ class InstanceManager {
     async deleteSecurityGroup(securityGroupName) {
         console.log('deleting security group', securityGroupName)
         try {
-            return await ec2.deleteSecurityGroup({ GroupName: securityGroupName })
+            return await ec2.deleteSecurityGroup({ GroupName: securityGroupName }).promise()
         } catch (error) {
-            throw error
+            console.log(error.code, securityGroupName)
         }
     }
 
@@ -91,7 +98,7 @@ class InstanceManager {
         }
     }
 
-    async createSecurityGroup(groupName) {
+    async createSecurityGroup(groupName, purge = false) {
         try {
             let sg = await ec2.createSecurityGroup({
                 GroupName: groupName,
@@ -117,6 +124,9 @@ class InstanceManager {
                 try {
                     let res = await ec2.deleteSecurityGroup({ GroupName: groupName }).promise()
                     console.log('Group deleted successfully!')
+                    if (purge) {
+                        return null
+                    }
                 } catch (err) {
                     if (err.code === 'DependencyViolation') {
                         console.log("[WARNING] THERE ARE RUNNING INSTANCES THAT USE THIS SECURITY GROUP. IT WON'T BE DELETED")
@@ -207,9 +217,9 @@ class InstanceManager {
         try {
             await this.checkAndTerminateRunningInstances()
             await Promise.all([
-                this.deleteKeyPair(this.keyPair.KeyName),
+                this.deleteKeyPair(this.keyPairName),
                 this.deleteSecurityGroup(this.securityGroupName),
-                this.deleteKeyPair(this.keyPair.KeyName+'-worker'),
+                this.deleteKeyPair(this.keyPairName+'-worker'),
                 this.deleteSecurityGroup(this.securityGroupName+'-worker')
             ])
         } catch (error) {

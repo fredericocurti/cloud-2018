@@ -53,7 +53,7 @@ class InstanceManager {
     async deleteSecurityGroup(securityGroupName) {
         console.log('deleting security group', securityGroupName)
         try {
-            return await ec2.deleteSecurityGroup({ GroupName: securityGroupName })
+            return await ec2.deleteSecurityGroup({ GroupName: securityGroupName }).promise()
         } catch (error) {
             throw error
         }

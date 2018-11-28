@@ -118,14 +118,14 @@ module.exports = {
 
     
     if ('purge' in argv) {
-        const instanceManager = await new InstanceManager(keyPairName, securityGroupName, username, akid, sak)
-        await instanceManager.purge()
-        try {
-            fs.unlinkSync(path.join(__dirname, 'credentials.js'))
-            console.log('Deleted credentials.js')
-        } catch (error) {
-            console.log(error)
-        }
+        let im = await new InstanceManager(keyPairName, securityGroupName, username, akid, sak, true)
+        await im.purge()
+        // try {
+            // fs.unlinkSync(path.join(__dirname, 'credentials.js'))
+            // console.log('Deleted credentials.js')
+        // } catch (error) {
+            // console.log(error)
+        // }
         process.exit()
     }
 

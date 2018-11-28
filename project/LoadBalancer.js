@@ -4,10 +4,22 @@ const express = require('express')
 const bodyParser = require('body-parser');
 const { fork } = require('child_process');
 const { InstanceManager } = require('./InstanceManager')
+const path = require('path')
 const app = express()
 
+/** @type {{_: [], count: number, sg: string, kp: string, owner: string, sak: string, aki: string}} */
+// @ts-ignore
+const argv = require('minimist')(process.argv.slice(2))
+let argval = ['count', 'sg', 'kp', 'owner', 'sak', 'aki']
+argval.every((i) => {
+    if (!(i in argv)) {
+        throw `Key ${i} missing in arguments!`
+    }
+    return (i in argv)
+})
+
 app.use(bodyParser.json())
-aws.config.update({ region: 'us-east-1' })
+aws.config.update({ region: 'us-east-1', accessKeyId: argv.aki, secretAccessKey: argv.sak})
 
 const ec2 = new aws.EC2()
 const remotePort = 5000
@@ -35,24 +47,34 @@ const listRunningInstances = async (instanceOwner) => {
 app.all('*', (req, res, next) => {
     const redirectUrl = 'http://'+ pickRandom(Object.keys(publicIps)) + ':' + remotePort + req.originalUrl
     console.log('Redirecting to', redirectUrl)
-    res.redirect(redirectUrl)
+    res.redirect(307, redirectUrl)
 })
 
 const main = async () => {
-    const instanceManager = await new InstanceManager('fred-aps3', 'APS-fred', 'fredericocurti')
-    // await instanceManager.createInstances(2)
-    const instanceAmountTarget = 3
+    const owner = argv.owner
+    const instanceAmountTarget = argv.count
     let replaceQueue = []
-    
-    // await instanceManager.checkAndTerminateRunningInstances()
-    // await instanceManager.createInstances(instanceAmountTarget)
 
-    let runningInstances = await listRunningInstances('fredericocurti')
+    try {
+        let r = await ec2.describeInstances({
+            Filters: [{Name: 'tag:Owner', Values: [owner]}]
+        }).promise()
+        console.log('Credentials are valid!')
+    } catch (error) {
+        if (error.code === 'AuthFailure') {
+            throw 'Failed authenticating! Please check credentials'
+        }
+        throw error
+    }
+
+    const instanceManager = await new InstanceManager(argv.kp+'-worker', argv.kp+'-worker', argv.owner)
+    
+    let runningInstances = await listRunningInstances(owner)
     if (runningInstances.length > instanceAmountTarget) {
         console.log('There are more instances than desired!, terminating extras...')
         let instancesToTerminate = runningInstances.filter((instance, index) => index >= instanceAmountTarget)
         await Promise.all(instancesToTerminate.map(i => instanceManager.terminateInstance(i.InstanceId)))
-        runningInstances = await listRunningInstances('fredericocurti')
+        runningInstances = await listRunningInstances(owner)
     }
 
     if (runningInstances.length < instanceAmountTarget) {
@@ -61,14 +83,14 @@ const main = async () => {
         }
         console.log('There are less instances than desired!, creating more...')
         await instanceManager.createInstances(instanceAmountTarget - runningInstances.length)
-        runningInstances = await listRunningInstances('fredericocurti')
+        runningInstances = await listRunningInstances(owner)
     }
 
     runningInstances.forEach((i) => {
         publicIps[i.PublicIpAddress] = i.State.Name
     })
 
-    const healthCheckProcess = fork('./healthcheck.js');
+    const healthCheckProcess = fork(path.join(__dirname, './healthcheck.js'));
 
     healthCheckProcess.on('message', async(msg) => {
         console.log('Message from child:', msg);
@@ -83,7 +105,7 @@ const main = async () => {
                 await instanceManager.terminateInstance(instanceIdToBeReplaced)
                 await instanceManager.createInstances(1)
 
-                runningInstances = await listRunningInstances('fredericocurti')
+                runningInstances = await listRunningInstances(owner)
                 runningInstances.forEach((i) => {
                     publicIps[i.PublicIpAddress] = i.State.Name
                 })

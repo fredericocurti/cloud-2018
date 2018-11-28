@@ -23,10 +23,16 @@ async function main() {
     // const username = await askQuestion("-> Please enter your username: ");
     // const keyPairName = await askQuestion("-> Please enter the desired keypair name: ");
     // const securityGroupName = await askQuestion("-> Please enter the desired Security Group name: ");
+    let nInstances = await askQuestion("-> How many instances would you like? ");
+    nInstances = parseInt(nInstances)
+
     const { akid, sak, username, keyPairName, securityGroupName } = require('./cred')
+    let waiterResult
     let previousInstances
+
     aws.config.update({ region: 'us-east-1', accessKeyId: akid, secretAccessKey: sak })
     const ec2 = new aws.EC2()
+
     try {
         previousInstances = await Promise.all([
             ec2.describeInstances({ Filters: [{ Name: 'key-name', Values: [keyPairName] }] }).promise(),
@@ -42,9 +48,14 @@ async function main() {
     console.log('Authentication Successfull')
     
     let previousInstancesCount = 0
+    let pi = []
     previousInstances.forEach(r => r.Reservations.forEach(r => r.Instances.forEach(i => {
-        console.log(i.InstanceId, '-',  i.State.Name)
-        previousInstancesCount ++
+        if (pi.find(e => e === i.InstanceId)) {
+        } else {
+            console.log(i.InstanceId, '-',  i.State.Name)
+            previousInstancesCount ++
+        }
+        pi.push(i.InstanceId)
     })))
 
     if (previousInstancesCount > 0) {
@@ -89,12 +100,19 @@ echo aws_secret_access_key = ${sak} >> /home/ubuntu/.aws/credentials
 sudo apt -y install nodejs
 git clone https://github.com/fredericocurti/cloud-2018 /home/ubuntu/cloud-2018
 cd /home/ubuntu/cloud-2018/project && npm install
-cd /home/ubuntu/cloud-2018/project && npm run loadbalancer`).toString('base64')
+sudo node /home/ubuntu/cloud-2018/project/LoadBalancer.js --count ${nInstances} --sg ${securityGroupName} --kp ${keyPairName} --owner ${username} --aki ${akid} --sak ${sak}/`)
+.toString('base64')
     }).promise()
 
     console.log(loadBalancerSubmission)
-    // await instanceManager.checkAndTerminateRunningInstances()
-    // console.log(akid, sak)
+    try {
+        waiterResult = await ec2.waitFor('instanceRunning', {
+            InstanceIds: [loadBalancerSubmission.Instances[0].InstanceId]
+        }).promise()
+        console.log('Load balancer deployed! PublicIp:', waiterResult.Reservations[0].Instances[0].PublicIpAddress)    
+    } catch (error) {
+        throw error
+    }
 }
 
 main()

@@ -51,6 +51,7 @@ app.all('*', (req, res, next) => {
 })
 
 const main = async () => {
+    console.log('--Args from cl:', argv)
     const owner = argv.owner
     const instanceAmountTarget = argv.count
     let replaceQueue = []
